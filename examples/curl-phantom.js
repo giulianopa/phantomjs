@@ -96,15 +96,11 @@ page.open( URLarg, function () {
       return document.body.innerHTML ? document.body.innerHTML : '(empty)' ;
     });
     var title = page.evaluate(function() {return document.title; });
-    // var body_elementID=page.evaluate(function() {return document.body.getElementById("qa") });
 
     // page.render( URLdump); // "screenshot"
     verbose && console.log('VERBOSE: Loading time '+ ( Date.now() - timestamp ) +' msec');
 
     debug && console.log('DEBUG: Page title: ' + ((title==='') ? '(none)':title) );
-    // debug && console.log('Page body:  ' + body_innerHTML );
-    // console.log('Page body is ' + body.innerHTML );
-    // console.log('Page Element: ' + bodyEl.innerHTML );
     debug && console.log('DEBUG: body_innerHTML.length='+ body_innerHTML.length);
     (debug || verbose) && console.log(' '); // empty line
     if ( full_page  || ( ! body_innerHTML ) || body_innerHTML.length < 9 ) {
@@ -113,7 +109,6 @@ page.open( URLarg, function () {
       console.log( body_innerHTML );
     }
     setTimeout(function() {
-        // console.log('done, check it... ' + URLdump);
         verbose && console.log('VERBOSE: status ' + theStatusPrev   + ' for ' + thePrevURL + ' (b)');
         verbose && console.log('VERBOSE: status ' + theStatusCode   + ' for ' + theCurrURL + ' (c)');
       }, 1333 ) ; // delay in milliseconds
