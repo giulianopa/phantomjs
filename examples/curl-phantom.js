@@ -3,9 +3,9 @@
 // grab the "rendered" HTML of a JavaScript-requiring web page
 
 // TBD:
-//   1. parameterize the X-Forwarded-For: header
-//   2. integrate with RobotFramework, possibly via https://github.com/datakurre/phantomrobot
-//      a. currently curl-phantom.js is easily callable by RF's "Run" command (in OperatingSystem RF lib)
+// add '-' as magic filename to read from STDIN
+// add more curl-like switches? --or just let curl do that and consume the output of curl?
+// add a switch for page.render( URLdump); // "screenshot"
 
 var system = require('system'); // var args = require('system').args;
 var page = require('webpage').create();
@@ -32,11 +32,11 @@ for (var i=1; i<system.args.length; i++) { /* skip args[0] which is this self-sa
        if ( system.args[i].indexOf('--debug')    == 0 ) { debug     = true; /* debug && console.log ('DEBUG: '   + system.args[i]); */ }
   else if ( system.args[i].indexOf('--full_page')== 0 ) { full_page = true; debug && console.log ('PAGE: '    + system.args[i]); }
   else if ( system.args[i].indexOf('--header')   == 0 ) { header_key=system.args[++i]; header_val=system.args[++i] }
-  else if ( system.args[i].indexOf('--xff')      == 0 ) { header_val=system.args[++i] }
+  else if ( system.args[i].indexOf('--xff')      == 0 ) { header_val=system.args[++i] } // kludge assume default header_key
   else if ( system.args[i].indexOf('--verbose')  == 0 ) { verbose   = true; debug && console.log ('VERBOSE: ' + system.args[i]); }
-  else if ( system.args[i].indexOf('X-Forwarded')== 0 ) { var tbd='parse me'; }
   else if ( system.args[i].indexOf('http')== 0 ) { /* http protocol optional for local files */ }
-  else if ( system.args[i].indexOf('html') > 0 ) { /* to detect local files */ }
+  else if ( system.args[i].indexOf('.htm') > 0 ) { /* to detect local files */ } // kludge?
+  else if ( system.args[i].indexOf('.js') > 0 ) { /* to detect local files */ } // kludge?
   else { console.log('unk. param: '+system.args[i]); }
 }
 
@@ -44,16 +44,13 @@ page.customHeaders = { header_key : header_val };
 debug && console.log ('VERBOSE: ' + header_key +': '+ header_val);
 
 page.onConsoleMessage = function (msg) { // call-back function intercepts console.log messages
-    console.log('DEBUG: ' + msg); // TBD: make conditional based on switches
+    debug && console.log('DEBUG: console.log message="' + msg + '"');
 };
 
 page.onLoadFinished = function(status) {
-  if ( theStatusCode == null) {
-       theStatusCode = status;
-  }
-  // console.log('Status: ' + status +' after onLoadFinished(' + status +')');
   if ( debug ) {
-    system.stderr.write('Status: ' + theStatusCode +' after onLoadFinished(' + status +')\n');
+    // console.log('Status: ' + status +' after onLoadFinished(' + status +')');
+    system.stderr.write('Status: ' + (theStatusCode ? theStatusCode : status) +' after onLoadFinished(' + status +')\n');
   }
 };
 
@@ -101,9 +98,8 @@ page.open( URLarg, function () {
     var title = page.evaluate(function() {return document.title; });
     // var body_elementID=page.evaluate(function() {return document.body.getElementById("qa") });
 
-    timestamp = Date.now() - timestamp;
     // page.render( URLdump); // "screenshot"
-    verbose && console.log('VERBOSE: Loading time ' + timestamp + ' msec');
+    verbose && console.log('VERBOSE: Loading time '+ ( Date.now() - timestamp ) +' msec');
 
     debug && console.log('DEBUG: Page title: ' + ((title==='') ? '(none)':title) );
     // debug && console.log('Page body:  ' + body_innerHTML );
