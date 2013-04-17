@@ -48,10 +48,12 @@ page.onConsoleMessage = function (msg) { // call-back function intercepts consol
 };
 
 page.onLoadFinished = function(status) {
-  if (status === 'success') {
-    console.log('Status: ' + theStatusCode +' after onLoadFinished(' + status +')');
-  } else {
-    console.log('Status: ' + status +' after onLoadFinished(' + status +')');
+  if ( theStatusCode == null) {
+       theStatusCode = status;
+  }
+  // console.log('Status: ' + status +' after onLoadFinished(' + status +')');
+  if ( debug ) {
+    system.stderr.write('Status: ' + theStatusCode +' after onLoadFinished(' + status +')\n');
   }
 };
 
@@ -91,6 +93,7 @@ phantom.onError = function(msg, trace) {
 };
 
 page.open( URLarg, function () {
+    // onLoadFinished executes here
     var page_content = page.content;
     var body_innerHTML= page.evaluate( function() {
       return document.body.innerHTML ? document.body.innerHTML : '(empty)' ;
@@ -118,7 +121,7 @@ page.open( URLarg, function () {
         verbose && console.log('VERBOSE: status ' + theStatusPrev   + ' for ' + thePrevURL + ' (b)');
         verbose && console.log('VERBOSE: status ' + theStatusCode   + ' for ' + theCurrURL + ' (c)');
       }, 1333 ) ; // delay in milliseconds
-    phantom.exit();
+    phantom.exit( theStatusCode);
   }) ;
 
 }
