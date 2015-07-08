@@ -27,6 +27,7 @@ var debug         = false;
 var full_page     = false;
 var header_key    = 'X-Forwarded-For';
 var header_val    = '3.1.20.13';
+var requestTimeout= 5000;	// Default request timeout
 
 for (var i=1; i<system.args.length; i++) { /* skip args[0] which is this self-same script filename */
        if ( system.args[i].indexOf('--debug')    == 0 ) { debug     = true; /* debug && console.log ('DEBUG: '   + system.args[i]); */ }
@@ -37,8 +38,11 @@ for (var i=1; i<system.args.length; i++) { /* skip args[0] which is this self-sa
   else if ( system.args[i].indexOf('http')== 0 ) { /* http protocol optional for local files */ }
   else if ( system.args[i].indexOf('.htm') > 0 ) { /* to detect local files */ } // kludge?
   else if ( system.args[i].indexOf('.js') > 0 ) { /* to detect local files */ } // kludge?
+  else if ( system.args[i].indexOf('--timeout')    == 0 ) { requestTimeout = system.args[++i];  }
   else { console.log('unk. param: '+system.args[i]); }
 }
+
+page.settings.resourceTimeout = requestTimeout;
 
 page.customHeaders = { header_key : header_val };
 debug && console.log ('VERBOSE: ' + header_key +': '+ header_val);
@@ -88,6 +92,11 @@ phantom.onError = function(msg, trace) {
     }
     console.error(msgStack.join('\n'));
 };
+
+page.onResourceTimeout = function(request) {
+	console.error('Request timed out due to ' + request.errorCode + ' - ' + request.errorString);
+	phantom.exit(1);
+}
 
 page.open( URLarg, function () {
     // onLoadFinished executes here
