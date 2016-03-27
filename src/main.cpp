@@ -26,69 +26,22 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
   THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-
 #include "consts.h"
 #include "utils.h"
 #include "env.h"
 #include "phantom.h"
-
-#ifdef Q_OS_LINUX
-#include "client/linux/handler/exception_handler.h"
-#endif
-#ifdef Q_OS_MAC
-#include "client/mac/handler/exception_handler.h"
-#endif
+#include "crashdump.h"
 
 #include <QApplication>
 #include <QSslSocket>
+#include <QIcon>
+#include <QWebSettings>
 
-#ifdef Q_OS_WIN32
-using namespace google_breakpad;
-static google_breakpad::ExceptionHandler* eh;
-#if !defined(QT_SHARED) && !defined(QT_DLL)
-#include <QtPlugin>
+#include <exception>
+#include <stdio.h>
 
-Q_IMPORT_PLUGIN(qcncodecs)
-Q_IMPORT_PLUGIN(qjpcodecs)
-Q_IMPORT_PLUGIN(qkrcodecs)
-Q_IMPORT_PLUGIN(qtwcodecs)
-Q_IMPORT_PLUGIN(qico)
-#endif
-#endif
-
-#if QT_VERSION != QT_VERSION_CHECK(4, 8, 4)
-#error Something is wrong with the setup. Please report to the mailing list!
-#endif
-
-int main(int argc, char** argv, const char** envp)
+static int inner_main(int argc, char** argv)
 {
-    // Setup Google Breakpad exception handler
-#ifdef Q_OS_LINUX
-    google_breakpad::ExceptionHandler eh("/tmp", NULL, Utils::exceptionHandler, NULL, true);
-#endif
-#ifdef Q_OS_MAC
-    google_breakpad::ExceptionHandler eh("/tmp", NULL, Utils::exceptionHandler, NULL, true, NULL);
-#endif
-#ifdef Q_OS_WIN32
-    // This is needed for CRT to not show dialog for invalid param
-    // failures and instead let the code handle it.
-    _CrtSetReportMode(_CRT_ASSERT, 0);
-
-    DWORD cbBuffer = ExpandEnvironmentStrings(TEXT("%TEMP%"), NULL, 0);
-
-    if (cbBuffer == 0) {
-        eh = new ExceptionHandler(TEXT("."), NULL, Utils::exceptionHandler, NULL, ExceptionHandler::HANDLER_ALL);
-    } else {
-        LPWSTR szBuffer = reinterpret_cast<LPWSTR>(malloc(sizeof(TCHAR) * (cbBuffer + 1)));
-
-        if (ExpandEnvironmentStrings(TEXT("%TEMP%"), szBuffer, cbBuffer + 1) > 0) {
-            wstring lpDumpPath(szBuffer);
-            eh = new ExceptionHandler(lpDumpPath, NULL, Utils::exceptionHandler, NULL, ExceptionHandler::HANDLER_ALL);
-        }
-        free(szBuffer);
-    }
-#endif
-
     QApplication app(argc, argv);
 
     app.setWindowIcon(QIcon(":/phantomjs-icon.png"));
@@ -97,11 +50,8 @@ int main(int argc, char** argv, const char** envp)
     app.setOrganizationDomain("www.ofilabs.com");
     app.setApplicationVersion(PHANTOMJS_VERSION_STRING);
 
-    // Prepare the "env" singleton using the environment variables
-    Env::instance()->parse(envp);
-
     // Registering an alternative Message Handler
-    qInstallMsgHandler(Utils::messageHandler);
+    qInstallMessageHandler(Utils::messageHandler);
 
 #if defined(Q_OS_LINUX)
     if (QSslSocket::supportsSsl()) {
@@ -111,15 +61,55 @@ int main(int argc, char** argv, const char** envp)
 #endif
 
     // Get the Phantom singleton
-    Phantom *phantom = Phantom::instance();
+    Phantom* phantom = Phantom::instance();
 
     // Start script execution
     if (phantom->execute()) {
         app.exec();
     }
 
-    // End script execution: delete the phantom singleton and set execution return value
+    // End script execution: delete the phantom singleton and set
+    // execution return value
     int retVal = phantom->returnValue();
     delete phantom;
+
+#ifndef QT_NO_DEBUG
+    // Clear all cached data before exiting, so it is not detected as
+    // leaked.
+    QWebSettings::clearMemoryCaches();
+#endif
+
     return retVal;
+}
+
+int main(int argc, char** argv)
+{
+    try {
+        init_crash_handler();
+        return inner_main(argc, argv);
+
+        // These last-ditch exception handlers write to the C stderr
+        // because who knows what kind of state Qt is in.  And they avoid
+        // using fprintf because _that_ might be in bad shape too.
+        // (I would drop all the way down to write() but then I'd have to
+        // write the code again for Windows.)
+        //
+        // print_crash_message includes a call to fflush(stderr).
+    } catch (std::bad_alloc) {
+        fputs("Memory exhausted.\n", stderr);
+        fflush(stderr);
+        return 1;
+
+    } catch (std::exception& e) {
+        fputs("Uncaught C++ exception: ", stderr);
+        fputs(e.what(), stderr);
+        putc('\n', stderr);
+        print_crash_message();
+        return 1;
+
+    } catch (...) {
+        fputs("Uncaught nonstandard exception.\n", stderr);
+        print_crash_message();
+        return 1;
+    }
 }

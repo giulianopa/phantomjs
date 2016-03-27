@@ -1,3 +1,4 @@
+"use strict";
 if (!Date.prototype.toISOString) {
     Date.prototype.toISOString = function () {
         function pad(n) { return n < 10 ? '0' + n : n; }
@@ -129,6 +130,7 @@ if (system.args.length === 1) {
         var har;
         if (status !== 'success') {
             console.log('FAIL to load the address');
+            phantom.exit(1);
         } else {
             page.endTime = new Date();
             page.title = page.evaluate(function () {
@@ -136,7 +138,7 @@ if (system.args.length === 1) {
             });
             har = createHAR(page.address, page.title, page.startTime, page.resources);
             console.log(JSON.stringify(har, undefined, 4));
+            phantom.exit();
         }
-        phantom.exit();
     });
 }

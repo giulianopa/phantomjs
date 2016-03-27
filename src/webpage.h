@@ -33,8 +33,10 @@
 
 #include <QMap>
 #include <QVariantMap>
-#include <QWebPage>
-#include <QWebFrame>
+#include <QtWebKitWidgets/QWebPage>
+#include <QtWebKitWidgets/QWebFrame>
+
+#include "cookiejar.h"
 
 class Config;
 class CustomPage;
@@ -77,17 +79,18 @@ class WebPage : public QObject, public QWebFrame::PrintCallback
     Q_PROPERTY(QString frameName READ frameName)
     Q_PROPERTY(int framesCount READ framesCount)
     Q_PROPERTY(QString focusedFrameName READ focusedFrameName)
+    Q_PROPERTY(QObject* cookieJar READ cookieJar WRITE setCookieJarFromQObject)
 
 public:
-    WebPage(QObject *parent, const QUrl &baseUrl = QUrl());
+    WebPage(QObject* parent, const QUrl& baseUrl = QUrl());
     virtual ~WebPage();
 
-    QWebFrame *mainFrame();
+    QWebFrame* mainFrame();
 
     QString content() const;
     QString frameContent() const;
-    void setContent(const QString &content);
-    void setFrameContent(const QString &content);
+    void setContent(const QString& content);
+    void setFrameContent(const QString& content);
 
     QString title() const;
     QString frameTitle() const;
@@ -102,31 +105,31 @@ public:
     QString framePlainText() const;
 
     QString libraryPath() const;
-    void setLibraryPath(const QString &dirPath);
+    void setLibraryPath(const QString& dirPath);
 
     QString offlineStoragePath() const;
 
     int offlineStorageQuota() const;
 
-    void setViewportSize(const QVariantMap &size);
+    void setViewportSize(const QVariantMap& size);
     QVariantMap viewportSize() const;
 
-    void setClipRect(const QVariantMap &size);
+    void setClipRect(const QVariantMap& size);
     QVariantMap clipRect() const;
 
-    void setScrollPosition(const QVariantMap &size);
+    void setScrollPosition(const QVariantMap& size);
     QVariantMap scrollPosition() const;
 
-    void setPaperSize(const QVariantMap &size);
+    void setPaperSize(const QVariantMap& size);
     QVariantMap paperSize() const;
 
     void setNavigationLocked(bool lock);
     bool navigationLocked();
 
-    void setCustomHeaders(const QVariantMap &headers);
+    void setCustomHeaders(const QVariantMap& headers);
     QVariantMap customHeaders() const;
 
-    void showInspector(const int remotePort = -1);
+    int showInspector(const int remotePort = -1);
 
     QString footer(int page, int numPages);
     qreal footerHeight() const;
@@ -180,7 +183,6 @@ public:
      *         Pages that this page has currently open.
      */
     QStringList pagesWindowName() const;
-
     /**
      * Returns "true" if it owns the pages it creates (and keeps them in "pages[]").
      * Default value is "true". Can be changed using {@link setOwnsPages()}.
@@ -233,12 +235,12 @@ public:
     QString focusedFrameName() const;
 
 public slots:
-    void openUrl(const QString &address, const QVariant &op, const QVariantMap &settings);
+    void openUrl(const QString& address, const QVariant& op, const QVariantMap& settings);
     void release();
     void close();
 
-    QVariant evaluateJavaScript(const QString &code);
-    bool render(const QString &fileName, const QVariantMap &map = QVariantMap());
+    QVariant evaluateJavaScript(const QString& code);
+    bool render(const QString& fileName, const QVariantMap& map = QVariantMap());
     /**
      * Render the page as base-64 encoded string.
      * Default image format is "png".
@@ -251,17 +253,19 @@ public slots:
      * @param format String containing one of the supported types
      * @return Rendering base-64 encoded of the page if the given format is supported, otherwise an empty string
      */
-    QString renderBase64(const QByteArray &format = "png");
-    bool injectJs(const QString &jsFilePath);
-    void _appendScriptElement(const QString &scriptUrl);
-    QObject *_getGenericCallback();
-    QObject *_getFilePickerCallback();
-    QObject *_getJsConfirmCallback();
-    QObject *_getJsPromptCallback();
-    void _uploadFile(const QString &selector, const QStringList &fileNames);
-    void sendEvent(const QString &type, const QVariant &arg1 = QVariant(), const QVariant &arg2 = QVariant(), const QString &mouseButton = QString(), const QVariant &modifierArg = QVariant());
+    QString renderBase64(const QByteArray& format = "png");
+    bool injectJs(const QString& jsFilePath);
+    void _appendScriptElement(const QString& scriptUrl);
+    QObject* _getGenericCallback();
+    QObject* _getFilePickerCallback();
+    QObject* _getJsConfirmCallback();
+    QObject* _getJsPromptCallback();
+    QObject* _getJsInterruptCallback();
+    void _uploadFile(const QString& selector, const QStringList& fileNames);
+    void sendEvent(const QString& type, const QVariant& arg1 = QVariant(), const QVariant& arg2 = QVariant(), const QString& mouseButton = QString(), const QVariant& modifierArg = QVariant());
 
-    void setContent(const QString &content, const QString &baseUrl);
+    void setContent(const QString& content, const QString& baseUrl);
+    void setFrameContent(const QString& content, const QString& baseUrl);
     /**
      * Returns a Child Page that matches the given <code>"window.name"</code>.
      * This utility method is faster than accessing the
@@ -273,7 +277,7 @@ public slots:
      * @return Returns the page that matches <code>'window.name'</code>,
      *         or NULL if none is found
      */
-    QObject *getPage(const QString &windowName) const;
+    QObject* getPage(const QString& windowName) const;
 
     /**
      * Returns the number of Child Frames inside the Current Frame.
@@ -300,7 +304,7 @@ public slots:
      * @param frameName Name of the Child frame
      * @return "true" if the frame was found, "false" otherwise
      */
-    bool switchToFrame(const QString &frameName);
+    bool switchToFrame(const QString& frameName);
     /**
      * Switches focus from the Current Frame to a Child Frame, identified by it's name.
      *
@@ -309,7 +313,7 @@ public slots:
      * @param frameName Name of the Child frame
      * @return "true" if the frame was found, "false" otherwise
      */
-    bool switchToChildFrame(const QString &frameName);
+    bool switchToChildFrame(const QString& frameName);
     /**
      * Switches focus from the Current Frame to a Child Frame, identified by it positional order.
      *
@@ -357,6 +361,21 @@ public slots:
     QString currentFrameName() const;
 
     /**
+     * Allows to set cookie jar for this page.
+     */
+    void setCookieJar(CookieJar* cookieJar);
+
+    /**
+     * Allows to set cookie jar in through QtWebKit Bridge
+     */
+    void setCookieJarFromQObject(QObject* cookieJar);
+
+    /**
+     * Returns the CookieJar object
+     */
+    CookieJar* cookieJar();
+
+    /**
      * Allows to set cookies by this Page, at the current URL.
      * This means that loading new URLs, causes the cookies to change dynamically
      * as in a normal desktop browser.
@@ -377,7 +396,7 @@ public slots:
      * @param cookies Expects a QList of QVariantMaps
      * @return Boolean "true" if at least 1 cookie was set
      */
-    bool setCookies(const QVariantList &cookies);
+    bool setCookies(const QVariantList& cookies);
     /**
      * Cookies visible by this Page, at the current URL.
      *
@@ -393,14 +412,14 @@ public slots:
      * @param cookie Cookie in QVariantMap format
      * @return Boolean "true" if cookie was added
      */
-    bool addCookie(const QVariantMap &cookie);
+    bool addCookie(const QVariantMap& cookie);
     /**
      * Delete cookie by name from the ones visible by this Page, at the current URL
      * @brief deleteCookie
      * @param cookieName Name of the Cookie to delete
      * @return Boolean "true" if cookie was deleted
      */
-    bool deleteCookie(const QString &cookieName);
+    bool deleteCookie(const QString& cookieName);
     /**
      * Delete All Cookies visible by this Page, at the current URL
      * @brief clearCookies
@@ -459,31 +478,41 @@ public slots:
      */
     void stop();
 
+    void stopJavaScript();
+
+    void clearMemoryCache();
+
+    void setProxy(const QString& proxyUrl);
+
 signals:
     void initialized();
     void loadStarted();
-    void loadFinished(const QString &status);
-    void javaScriptAlertSent(const QString &msg);
-    void javaScriptConsoleMessageSent(const QString &message);
-    void javaScriptErrorSent(const QString &msg, const QString &stack);
-    void resourceRequested(const QVariant &requestData, QObject *request);
-    void resourceReceived(const QVariant &resource);
-    void resourceError(const QVariant &errorData);
-    void resourceTimeout(const QVariant &errorData);
-    void urlChanged(const QUrl &url);
-    void navigationRequested(const QUrl &url, const QString &navigationType, bool navigationLocked, bool isMainFrame);
-    void rawPageCreated(QObject *page);
-    void closing(QObject *page);
+    void loadFinished(const QString& status);
+    void javaScriptAlertSent(const QString& msg);
+    void javaScriptConsoleMessageSent(const QString& message);
+    void javaScriptErrorSent(const QString& msg, int lineNumber, const QString& sourceID, const QString& stack);
+    void resourceRequested(const QVariant& requestData, QObject* request);
+    void resourceReceived(const QVariant& resource);
+    void resourceError(const QVariant& errorData);
+    void resourceTimeout(const QVariant& errorData);
+    void urlChanged(const QString& url);
+    void navigationRequested(const QString& url, const QString& navigationType, bool navigationLocked, bool isMainFrame);
+    void rawPageCreated(QObject* page);
+    void closing(QObject* page);
+    void repaintRequested(const int x, const int y, const int width, const int height);
 
 private slots:
     void finish(bool ok);
-    void setupFrame(QWebFrame *frame = NULL);
+    void setupFrame(QWebFrame* frame = NULL);
     void updateLoadingProgress(int progress);
+    void handleRepaintRequested(const QRect& dirtyRect);
+    void handleUrlChanged(const QUrl& url);
+    void handleCurrentFrameDestroyed();
 
 private:
     QImage renderImage();
-    bool renderPdf(const QString &fileName);
-    void applySettings(const QVariantMap &defaultSettings);
+    bool renderPdf(const QString& fileName);
+    void applySettings(const QVariantMap& defaultSettings);
     QString userAgent() const;
 
     /**
@@ -492,27 +521,30 @@ private:
      * @brief changeCurrentFrame
      * @param frame The Child frame
      */
-    void changeCurrentFrame(QWebFrame * const frame);
+    void changeCurrentFrame(QWebFrame* const frame);
 
-    QString filePicker(const QString &oldFile);
-    bool javaScriptConfirm(const QString &msg);
-    bool javaScriptPrompt(const QString &msg, const QString &defaultValue, QString *result);
+    QString filePicker(const QString& oldFile);
+    bool javaScriptConfirm(const QString& msg);
+    bool javaScriptPrompt(const QString& msg, const QString& defaultValue, QString* result);
+    void javascriptInterrupt();
 
 private:
-    CustomPage *m_customWebPage;
-    NetworkAccessManager *m_networkAccessManager;
-    QWebFrame *m_mainFrame;
-    QWebFrame *m_currentFrame;
+    CustomPage* m_customWebPage;
+    NetworkAccessManager* m_networkAccessManager;
+    QWebFrame* m_mainFrame;
+    QWebFrame* m_currentFrame;
     QRect m_clipRect;
     QPoint m_scrollPosition;
     QVariantMap m_paperSize; // For PDF output via render()
     QString m_libraryPath;
     QWebInspector* m_inspector;
-    WebpageCallbacks *m_callbacks;
+    WebpageCallbacks* m_callbacks;
     bool m_navigationLocked;
     QPoint m_mousePos;
     bool m_ownsPages;
     int m_loadingProgress;
+    bool m_shouldInterruptJs;
+    CookieJar* m_cookieJar;
 
     friend class Phantom;
     friend class CustomPage;
