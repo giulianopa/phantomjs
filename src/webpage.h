@@ -35,6 +35,7 @@
 #include <QVariantMap>
 #include <QtWebKitWidgets/QWebPage>
 #include <QtWebKitWidgets/QWebFrame>
+#include <QPdfWriter>
 
 #include "cookiejar.h"
 
@@ -484,6 +485,10 @@ public slots:
 
     void setProxy(const QString& proxyUrl);
 
+    qreal stringToPointSize(const QString&) const;
+    qreal printMargin(const QVariantMap&, const QString&);
+    qreal getHeight(const QVariantMap&, const QString&) const;
+
 signals:
     void initialized();
     void loadStarted();
@@ -511,7 +516,7 @@ private slots:
 
 private:
     QImage renderImage();
-    bool renderPdf(const QString& fileName);
+    bool renderPdf(QPdfWriter& pdfWriter);
     void applySettings(const QVariantMap& defaultSettings);
     QString userAgent() const;
 
@@ -545,6 +550,7 @@ private:
     int m_loadingProgress;
     bool m_shouldInterruptJs;
     CookieJar* m_cookieJar;
+    qreal m_dpi;
 
     friend class Phantom;
     friend class CustomPage;

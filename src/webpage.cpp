@@ -30,47 +30,46 @@
 
 #include "webpage.h"
 
-#include <math.h>
-
 #include <QApplication>
+#include <QBuffer>
 #include <QContextMenuEvent>
-#include <QDesktopServices>
 #include <QDateTime>
+#include <QDebug>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFileInfo>
+#include <QImageWriter>
 #include <QKeyEvent>
+#include <QMapIterator>
 #include <QMouseEvent>
 #include <QNetworkAccessManager>
 #include <QNetworkCookie>
+#include <QNetworkProxy>
 #include <QNetworkRequest>
 #include <QPainter>
-#include <QtPrintSupport/QPrinter>
-#include <QWebHistory>
-#include <QWebHistoryItem>
+#include <QScreen>
+#include <QUrl>
+#include <QUuid>
 #include <QWebElement>
 #include <QWebFrame>
-#include <QWebPage>
+#include <QWebHistory>
+#include <QWebHistoryItem>
 #include <QWebInspector>
-#include <QMapIterator>
-#include <QBuffer>
-#include <QDebug>
-#include <QImageWriter>
-#include <QUuid>
-#include <QUrl>
-#include <QNetworkProxy>
+#include <QWebPage>
+#include <math.h>
 
-#include "phantom.h"
-#include "networkaccessmanager.h"
-#include "utils.h"
+#include "callback.h"
 #include "config.h"
 #include "consts.h"
-#include "callback.h"
 #include "cookiejar.h"
+#include "networkaccessmanager.h"
+#include "phantom.h"
 #include "system.h"
+#include "utils.h"
 
 #ifdef Q_OS_WIN
-#include <io.h>
 #include <fcntl.h>
+#include <io.h>
 #endif
 
 // Ensure we have at least head and body.
@@ -415,12 +414,16 @@ WebPage::WebPage(QObject* parent, const QUrl& baseUrl)
     pageSettings->setAttribute(QWebSettings::OfflineWebApplicationCacheEnabled, true);
     pageSettings->setAttribute(QWebSettings::FrameFlatteningEnabled, true);
 
-    pageSettings->setAttribute(QWebSettings::LocalStorageEnabled, true);
+    bool isLocalStorageEnabled = phantomCfg->localStorageDefaultQuota() >= 0;
+    pageSettings->setAttribute(QWebSettings::LocalStorageEnabled, isLocalStorageEnabled);
 
-    if (phantomCfg->localStoragePath().isEmpty()) {
-        pageSettings->setLocalStoragePath(QStandardPaths::writableLocation(QStandardPaths::DataLocation));
-    } else {
-        pageSettings->setLocalStoragePath(phantomCfg->localStoragePath());
+    if (isLocalStorageEnabled) {
+        if (phantomCfg->localStoragePath().isEmpty()) {
+            pageSettings->setLocalStoragePath(QStandardPaths::writableLocation(QStandardPaths::DataLocation));
+        }
+        else {
+            pageSettings->setLocalStoragePath(phantomCfg->localStoragePath());
+        }
     }
 
     // Custom network access manager to allow traffic monitoring.
@@ -435,6 +438,7 @@ WebPage::WebPage(QObject* parent, const QUrl& baseUrl)
     connect(m_networkAccessManager, SIGNAL(resourceTimeout(QVariant)),
             SIGNAL(resourceTimeout(QVariant)));
 
+    m_dpi = qRound(QApplication::primaryScreen()->logicalDotsPerInch());
     m_customWebPage->setViewportSize(QSize(400, 300));
 }
 
@@ -656,6 +660,10 @@ void WebPage::applySettings(const QVariantMap& def)
 
     if (def.contains(PAGE_SETTINGS_PROXY)) {
         setProxy(def[PAGE_SETTINGS_PROXY].toString());
+    }
+
+    if (def.contains(PAGE_SETTINGS_DPI)) {
+        m_dpi = def[PAGE_SETTINGS_DPI].toReal();
     }
 }
 
@@ -1002,7 +1010,8 @@ bool WebPage::render(const QString& fileName, const QVariantMap& option)
 
     bool retval = true;
     if (format == "pdf") {
-        retval = renderPdf(outFileName);
+        QPdfWriter pdfWriter(fileName);
+        retval = renderPdf(pdfWriter);
     } else {
         QImage rawPageRendering = renderImage();
 
@@ -1056,23 +1065,31 @@ QString WebPage::renderBase64(const QByteArray& format)
 {
     QByteArray nformat = format.toLower();
 
-    // Check if the given format is supported
-    if (QImageWriter::supportedImageFormats().contains(nformat)) {
-        QImage rawPageRendering = renderImage();
+    if (format != "pdf" && !QImageWriter::supportedImageFormats().contains(nformat)) {
+        // Return an empty string in case an unsupported format was provided
+        return "";
+    }
 
-        // Prepare buffer for writing
-        QByteArray bytes;
-        QBuffer buffer(&bytes);
-        buffer.open(QIODevice::WriteOnly);
+    // Prepare buffer for writing
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+
+    if (format == "pdf") {
+        QPdfWriter pdfWriter(&buffer);
+
+        if (!renderPdf(pdfWriter)) {
+            // Return an empty string if pdf render fails
+            return "";
+        }
+    } else {
+        QImage rawPageRendering = renderImage();
 
         // Writing image to the buffer, using PNG encoding
         rawPageRendering.save(&buffer, nformat);
-
-        return bytes.toBase64();
     }
 
-    // Return an empty string in case an unsupported format was provided
-    return "";
+    return bytes.toBase64();
 }
 
 QImage WebPage::renderImage()
@@ -1132,9 +1149,7 @@ QImage WebPage::renderImage()
     return buffer;
 }
 
-#define PHANTOMJS_PDF_DPI 72            // Different defaults. OSX: 72, X11: 75(?), Windows: 96
-
-qreal stringToPointSize(const QString& string)
+qreal WebPage::stringToPointSize(const QString& string) const
 {
     static const struct {
         QString unit;
@@ -1143,8 +1158,8 @@ qreal stringToPointSize(const QString& string)
         { "mm", 72 / 25.4 },
         { "cm", 72 / 2.54 },
         { "in", 72 },
-        { "px", 72.0 / PHANTOMJS_PDF_DPI },
-        { "", 72.0 / PHANTOMJS_PDF_DPI }
+        { "px", 72.0 / m_dpi },
+        { "", 72.0 / m_dpi }
     };
     for (uint i = 0; i < sizeof(units) / sizeof(units[0]); ++i) {
         if (string.endsWith(units[i].unit)) {
@@ -1156,7 +1171,7 @@ qreal stringToPointSize(const QString& string)
     return 0;
 }
 
-qreal printMargin(const QVariantMap& map, const QString& key)
+qreal WebPage::printMargin(const QVariantMap& map, const QString& key)
 {
     const QVariant margin = map.value(key);
     if (margin.isValid() && margin.canConvert(QVariant::String)) {
@@ -1166,12 +1181,9 @@ qreal printMargin(const QVariantMap& map, const QString& key)
     }
 }
 
-bool WebPage::renderPdf(const QString& fileName)
+bool WebPage::renderPdf(QPdfWriter& pdfWriter)
 {
-    QPrinter printer;
-    printer.setOutputFormat(QPrinter::PdfFormat);
-    printer.setOutputFileName(fileName);
-    printer.setResolution(PHANTOMJS_PDF_DPI);
+    pdfWriter.setResolution(m_dpi);
     QVariantMap paperSize = m_paperSize;
 
     if (paperSize.isEmpty()) {
@@ -1184,51 +1196,51 @@ bool WebPage::renderPdf(const QString& fileName)
     if (paperSize.contains("width") && paperSize.contains("height")) {
         const QSizeF sizePt(ceil(stringToPointSize(paperSize.value("width").toString())),
                             ceil(stringToPointSize(paperSize.value("height").toString())));
-        printer.setPaperSize(sizePt, QPrinter::Point);
+        pdfWriter.setPageSize(QPageSize(sizePt, QPageSize::Point));
     } else if (paperSize.contains("format")) {
-        const QPrinter::Orientation orientation = paperSize.contains("orientation")
+        const QPageLayout::Orientation orientation = paperSize.contains("orientation")
                 && paperSize.value("orientation").toString().compare("landscape", Qt::CaseInsensitive) == 0 ?
-                QPrinter::Landscape : QPrinter::Portrait;
-        printer.setOrientation(orientation);
+                QPageLayout::Portrait : QPageLayout::Landscape;
+        pdfWriter.setPageOrientation(orientation);
         static const struct {
             QString format;
-            QPrinter::PaperSize paperSize;
+            QPageSize::PageSizeId paperSize;
         } formats[] = {
-            { "A0", QPrinter::A0 },
-            { "A1", QPrinter::A1 },
-            { "A2", QPrinter::A2 },
-            { "A3", QPrinter::A3 },
-            { "A4", QPrinter::A4 },
-            { "A5", QPrinter::A5 },
-            { "A6", QPrinter::A6 },
-            { "A7", QPrinter::A7 },
-            { "A8", QPrinter::A8 },
-            { "A9", QPrinter::A9 },
-            { "B0", QPrinter::B0 },
-            { "B1", QPrinter::B1 },
-            { "B2", QPrinter::B2 },
-            { "B3", QPrinter::B3 },
-            { "B4", QPrinter::B4 },
-            { "B5", QPrinter::B5 },
-            { "B6", QPrinter::B6 },
-            { "B7", QPrinter::B7 },
-            { "B8", QPrinter::B8 },
-            { "B9", QPrinter::B9 },
-            { "B10", QPrinter::B10 },
-            { "C5E", QPrinter::C5E },
-            { "Comm10E", QPrinter::Comm10E },
-            { "DLE", QPrinter::DLE },
-            { "Executive", QPrinter::Executive },
-            { "Folio", QPrinter::Folio },
-            { "Ledger", QPrinter::Ledger },
-            { "Legal", QPrinter::Legal },
-            { "Letter", QPrinter::Letter },
-            { "Tabloid", QPrinter::Tabloid }
+            { "A0", QPageSize::A0 },
+            { "A1", QPageSize::A1 },
+            { "A2", QPageSize::A2 },
+            { "A3", QPageSize::A3 },
+            { "A4", QPageSize::A4 },
+            { "A5", QPageSize::A5 },
+            { "A6", QPageSize::A6 },
+            { "A7", QPageSize::A7 },
+            { "A8", QPageSize::A8 },
+            { "A9", QPageSize::A9 },
+            { "B0", QPageSize::B0 },
+            { "B1", QPageSize::B1 },
+            { "B2", QPageSize::B2 },
+            { "B3", QPageSize::B3 },
+            { "B4", QPageSize::B4 },
+            { "B5", QPageSize::B5 },
+            { "B6", QPageSize::B6 },
+            { "B7", QPageSize::B7 },
+            { "B8", QPageSize::B8 },
+            { "B9", QPageSize::B9 },
+            { "B10", QPageSize::B10 },
+            { "C5E", QPageSize::C5E },
+            { "Comm10E", QPageSize::Comm10E },
+            { "DLE", QPageSize::DLE },
+            { "Executive", QPageSize::Executive },
+            { "Folio", QPageSize::Folio },
+            { "Ledger", QPageSize::Ledger },
+            { "Legal", QPageSize::Legal },
+            { "Letter", QPageSize::Letter },
+            { "Tabloid", QPageSize::Tabloid }
         };
-        printer.setPaperSize(QPrinter::A4); // Fallback
+        pdfWriter.setPageSize(QPageSize(QPageSize::A4)); // Fallback
         for (uint i = 0; i < sizeof(formats) / sizeof(formats[0]); ++i) {
             if (paperSize.value("format").toString().compare(formats[i].format, Qt::CaseInsensitive) == 0) {
-                printer.setPaperSize(formats[i].paperSize);
+                pdfWriter.setPageSize(QPageSize(formats[i].paperSize));
                 break;
             }
         }
@@ -1263,9 +1275,12 @@ bool WebPage::renderPdf(const QString& fileName)
         }
     }
 
-    printer.setPageMargins(marginLeft, marginTop, marginRight, marginBottom, QPrinter::Point);
+    pdfWriter.setPageMargins(QMarginsF(marginLeft, marginTop, marginRight, marginBottom), QPageLayout::Point);
 
-    m_mainFrame->print(&printer, this);
+    QPainter painter(&pdfWriter);
+    m_mainFrame->render(&painter);
+    painter.end();
+
     return true;
 }
 
@@ -1284,7 +1299,7 @@ QString WebPage::windowName() const
     return m_mainFrame->evaluateJavaScript("window.name;").toString();
 }
 
-qreal getHeight(const QVariantMap& map, const QString& key)
+qreal WebPage::getHeight(const QVariantMap& map, const QString& key) const
 {
     QVariant footer = map.value(key);
     if (!footer.canConvert(QVariant::Map)) {
