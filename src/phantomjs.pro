@@ -1,7 +1,3 @@
-if(!equals(QT_MAJOR_VERSION, 5)|!equals(QT_MINOR_VERSION, 6)) {
-    error("This program can only be compiled with Qt 5.6.x.")
-}
-
 TEMPLATE = app
 TARGET = phantomjs
 QT += network webkitwidgets
@@ -12,10 +8,9 @@ DESTDIR = ../bin
 RESOURCES = phantomjs.qrc \
     ghostdriver/ghostdriver.qrc
 
-win32 {
+CONFIG(static):win32: {
     RESOURCES += \
-     qt/qtwebkit/Source/WebCore/inspector/front-end/WebKit.qrc \
-     qt/qtwebkit/Source/WebCore/generated/InspectorBackendCommands.qrc
+        $$(WEB_INSPECTOR_RESOURCES_DIR)/WebInspector.qrc
 }
 
 HEADERS = \
